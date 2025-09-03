@@ -1,5 +1,6 @@
 numpy
 scipy
+pandas
 matplotlib
 notebook
 moviepy==1.0.3
@@ -9,9 +10,8 @@ comet_ml==3.28.2
 rich==12.4.4
 # Submitit with experimental branch
 submitit==1.4.5
-hydra-core==1.2.0
-hydra-colorlog==1.2.0
+hydra-core
+hydra-colorlog
 # Submitit launcher
 git+https://github.com/MikeS96/hydra_submitit_launcher@main#egg=hydra-submitit-launcher
-hydra_optuna_sweeper==1.2.0
-
+hydra_optuna_sweeper
