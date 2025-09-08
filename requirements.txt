@@ -6,7 +6,7 @@ notebook
 moviepy==1.0.3
 opencv-python
 einops
-comet_ml==3.28.2
+comet_ml
 rich==12.4.4
 # Submitit with experimental branch
 submitit==1.4.5
