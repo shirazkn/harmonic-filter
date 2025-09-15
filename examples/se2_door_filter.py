@@ -57,6 +57,7 @@ def main(cfg: DictConfig) -> Optional[float]:
         spatial_grid_size=grid_size,
         interpolation_method="spline",
         spline_order=2,
+        # TODO: Set this to 1 (or undersample) to ensure fair comparison
         oversampling_factor=3,
     )
 
@@ -81,14 +82,15 @@ def main(cfg: DictConfig) -> Optional[float]:
         measurement_noise=measurement_noise,
     )
 
-    # Define prior and create filter
+    # Define prior
     mu_prior = simulator.position.parameters()
-    cov_prior = np.diag(
-        cfg.filter.var_prior
-    )  # We are not certain about the orientation
+    cov_prior = np.diag(cfg.filter.var_prior)
+
     prior = SE2Gaussian(mu_prior, cov_prior, samples=poses, fft=fft)
     prior.normalize()
-    filter = BayesFilter(distribution=SE2, prior=prior)
+
+    # Initialize filters
+    hef = BayesFilter(distribution=SE2, prior=prior)
     ekf = BearingEKF(prior=mu_prior, prior_cov=cov_prior)
     pf = BearingPF(
         prior=mu_prior,
@@ -96,7 +98,7 @@ def main(cfg: DictConfig) -> Optional[float]:
         n_particles=np.prod(grid_size),
         d_door2pose=d_door2pose,
     )
-    hf = BearingHF(
+    histf = BearingHF(
         prior=mu_prior,
         prior_cov=cov_prior,
         grid_samples=poses,
@@ -104,7 +106,8 @@ def main(cfg: DictConfig) -> Optional[float]:
         d_door2pose=d_door2pose,
     )
 
-    trajectories = dict(
+    # For logging
+    mean_trajectory = dict(
         HEF=np.zeros((simulator.n_samples, 3)),
         EKF=np.zeros((simulator.n_samples, 3)),
         HistF=np.zeros((simulator.n_samples, 3)),
@@ -112,28 +115,27 @@ def main(cfg: DictConfig) -> Optional[float]:
         Measurement=np.zeros((simulator.n_samples, 3)),
         GT=np.zeros((simulator.n_samples, 3)),
     )
-    trajectories_mode = deepcopy(trajectories)
-    # Populate first position with prior pose
-    for key in trajectories.keys():
-        trajectories[key][0] = simulator.position.parameters()
-        trajectories_mode[key][0] = simulator.position.parameters()
+    mode_trajectory = deepcopy(mean_trajectory)
     nll = dict(HEF=[], EKF=[], HistF=[], PF=[], Measurement=[])
-    # Populate nll with prior estimate wrt to GT
+
+    # Populate the first entry with prior pose
     gt_pose = simulator.position.parameters()
+    for key in mean_trajectory.keys():
+        mean_trajectory[key][0] = gt_pose
+        mode_trajectory[key][0] = gt_pose
+
     nll["Measurement"].append(-np.log(0.5))
-    nll['HEF'].append(filter.neg_log_likelihood2(prior.energy, prior.l_n_z, gt_pose, grid_size).item())
+    nll['HEF'].append(hef.neg_log_likelihood2(prior.energy, prior.l_n_z, 
+                                              gt_pose, grid_size).item())
     nll["EKF"].append(ekf.neg_log_likelihood(gt_pose))
     nll["PF"].append(pf.neg_log_likelihood(gt_pose, (-0.5, 0.5), grid_size))
-    nll["HistF"].append(hf.neg_log_likelihood(gt_pose))
+    nll["HistF"].append(histf.neg_log_likelihood(gt_pose))
 
-    for it in tqdm(
-        range(275),
-        total=275,
-        desc="Filtering door dataset...",
-    ):
+    for it in tqdm(range(275), desc="Filtering door dataset..."):
         ### Predict step ###
         motion_distribution = simulator.motion()
-        belief_hat = filter.prediction(motion_model=motion_distribution)
+
+        hef_pred = hef.prediction(motion_model=motion_distribution)
         ekf.prediction(
             step=motion_distribution.mu,
             step_cov=np.linalg.inv(motion_distribution.inv_cov),
@@ -142,61 +144,62 @@ def main(cfg: DictConfig) -> Optional[float]:
             step=motion_distribution.mu,
             step_cov=np.linalg.inv(motion_distribution.inv_cov),
         )
-        hf.prediction(
+        histf.prediction(
             step=motion_distribution.mu,
             step_cov=np.linalg.inv(motion_distribution.inv_cov),
         )
+
         ### Update step ###
         measurement_distribution = simulator.measurement()
         gt_pose = simulator.gt_bins[simulator.iteration]
-        trajectories["GT"][it] = trajectories_mode["GT"][it] = gt_pose
-        trajectories["Measurement"][it] = compute_weighted_mean(
-            measurement_distribution.prob, poses, x, y, theta
-        )
-        trajectories_mode["Measurement"][it] = compute_mode(measurement_distribution.prob, poses)
-        # Compute log-likelihood of GT given the measurement
+        mean_trajectory["GT"][it] = mode_trajectory["GT"][it] = gt_pose
+
+        # "Expected/Maximum Likelihood Filter"
+        mean_trajectory["Measurement"][it] = compute_weighted_mean(
+            measurement_distribution.prob, poses, x, y, theta)
+        mode_trajectory["Measurement"][it] = compute_mode(measurement_distribution.prob, poses)
         nll["Measurement"].append(simulator.neg_log_likelihood(gt_pose))
-        # Harmonic filter
-        posteriori_hat, measurement_hat = filter.update(
+        # Harmonic Exponential Filter (HEF)
+        hef_posterior, hef_measurement = hef.update(
             measurement_model=measurement_distribution
         )
-        harmonic_pos_pose = compute_weighted_mean(
-            posteriori_hat.prob, poses, x, y, theta
+        hef_mean = compute_weighted_mean(
+            hef_posterior.prob, poses, x, y, theta
         )
-        trajectories["HEF"][it] = harmonic_pos_pose
-        harmonic_mode_pose = compute_mode(posteriori_hat.prob, poses)
-        trajectories_mode["HEF"][it] = harmonic_mode_pose
-        nll['HEF'].append(filter.neg_log_likelihood2(posteriori_hat.energy, posteriori_hat.l_n_z, gt_pose, grid_size).item())
-        # EKF filter
-        ekf_pos_pose, ekf_pos_cov = ekf.update(
+        mean_trajectory["HEF"][it] = hef_mean
+        hef_mode = compute_mode(hef_posterior.prob, poses)
+        mode_trajectory["HEF"][it] = hef_mode
+        nll['HEF'].append(hef.neg_log_likelihood2(hef_posterior.energy, hef_posterior.l_n_z, gt_pose, grid_size).item())
+        # Extended Kalman Filter (EKF)
+        ekf_mean, ekf_pos_cov = ekf.update(
             landmarks=np.array(simulator.doors),
             observations=np.array(simulator.bearing_bins[simulator.iteration]),
             observations_cov=np.ones(len(simulator.doors)) * simulator.measurement_cov,
         )
-        trajectories["EKF"][it] = trajectories_mode["EKF"][it] = ekf_pos_pose
+        mean_trajectory["EKF"][it] = mode_trajectory["EKF"][it] = ekf_mean
         nll["EKF"].append(ekf.neg_log_likelihood(gt_pose))
-        # PF filter
-        pf_pos_pose = pf.update(
+        # Particle Filter (PF)
+        pf_mean = pf.update(
             landmarks=np.array(simulator.doors),
             map_mask=simulator.map_mask_unprocessed,
             observations=simulator.bearing_bins[simulator.iteration],
             observations_cov=np.ones(len(simulator.doors)) * simulator.measurement_cov,
         )
-        trajectories["PF"][it] = pf_pos_pose
-        pf_mode_pose = pf.compute_mode()
-        trajectories_mode["PF"][it] = pf_mode_pose
+        mean_trajectory["PF"][it] = pf_mean
+        pf_mode = pf.compute_mode()
+        mode_trajectory["PF"][it] = pf_mode
         nll["PF"].append(pf.neg_log_likelihood(gt_pose, (-0.5, 0.5), grid_size))
-        # HF filter
-        hf_pos_pose = hf.update(
+        # Histogram Filter (HistF)
+        histf_mean = histf.update(
             landmarks=np.array(simulator.doors),
             map_mask=simulator.map_mask,
             observations=simulator.bearing_bins[simulator.iteration],
             observations_cov=np.ones(len(simulator.doors)) * simulator.measurement_cov,
         )
-        trajectories["HistF"][it] = hf_pos_pose
-        hf_mode_pose = hf.compute_mode()
-        trajectories_mode["HistF"][it] = hf_mode_pose
-        nll["HistF"].append(hf.neg_log_likelihood(gt_pose))
+        mean_trajectory["HistF"][it] = histf_mean
+        histf_mode = histf.compute_mode()
+        mode_trajectory["HistF"][it] = histf_mode
+        nll["HistF"].append(histf.neg_log_likelihood(gt_pose))
 
         # Plotting the bearing - only for debuggin!
         # plot_angles(gt_pose, bearings=simulator.bearing_bins[simulator.iteration],
@@ -205,11 +208,11 @@ def main(cfg: DictConfig) -> Optional[float]:
         # plt.show()
         legend = [rf"Predicted belief", rf"Measurement Likelihood", rf"Posterior belief"]
         axes_means = plot_se2_mean_filters(
-            [belief_hat.prob.real, measurement_hat.prob.real, posteriori_hat.prob.real],
+            [hef_pred.prob.real, hef_measurement.prob.real, hef_posterior.prob.real],
             x,
             y,
             theta,
-            samples=trajectories,
+            samples=mean_trajectory,
             iteration=it,
             beacons=np.array(simulator.doors),
             level_contours=False,
@@ -217,11 +220,11 @@ def main(cfg: DictConfig) -> Optional[float]:
             config=plt_cfg.CONFIG_MEAN_SE2_UWB,
         )
         axes_modes = plot_se2_mean_filters(
-            [belief_hat.prob.real, measurement_hat.prob.real, posteriori_hat.prob.real],
+            [hef_pred.prob.real, hef_measurement.prob.real, hef_posterior.prob.real],
             x,
             y,
             theta,
-            samples=trajectories_mode,
+            samples=mode_trajectory,
             iteration=it,
             beacons=np.array(simulator.doors),
             level_contours=False,
@@ -230,10 +233,10 @@ def main(cfg: DictConfig) -> Optional[float]:
         )
         axes_filters = plot_se2_filters(
             {
-                "HEF": [harmonic_pos_pose, posteriori_hat.prob.real, harmonic_mode_pose],
-                "EKF": [ekf_pos_pose, ekf_pos_cov, ekf_pos_pose],
-                "PF": [pf_pos_pose, pf.particles, pf_mode_pose],
-                "HistF": [hf_pos_pose, hf.prior.reshape(grid_size), hf_mode_pose],
+                "HEF": [hef_mean, hef_posterior.prob.real, hef_mode],
+                "EKF": [ekf_mean, ekf_pos_cov, ekf_mean],
+                "PF": [pf_mean, pf.particles, pf_mode],
+                "HistF": [histf_mean, histf.prior.reshape(grid_size), histf_mode],
                 "GT": [gt_pose, None],
             },
             x,
@@ -347,7 +350,7 @@ def main(cfg: DictConfig) -> Optional[float]:
     plt.close()
     # Plot trajectory
     ax, metrics = plot_error_xy_trajectory(
-        trajectories,
+        mean_trajectory,
         scaling_factor,
         offset_x,
         offset_y,
@@ -356,7 +359,7 @@ def main(cfg: DictConfig) -> Optional[float]:
         x_y_limits=[-18.5, 8.5, -8.0, 16.5],
     )
     _, metrics_mode = plot_error_xy_trajectory(
-        trajectories_mode,
+        mode_trajectory,
         scaling_factor,
         offset_x,
         offset_y,
@@ -402,8 +405,8 @@ def main(cfg: DictConfig) -> Optional[float]:
     with open(f"{others_path}/results.json", "w") as f:
         json.dump(
             {
-                "trajectories": trajectories,
-                "trajectoris_mode": trajectories_mode,
+                "trajectories": mean_trajectory,
+                "trajectoris_mode": mode_trajectory,
                 "metrics": metrics_dict,
                 "neg_log_likelihood": nll,
                 "params": OmegaConf.to_container(cfg),
