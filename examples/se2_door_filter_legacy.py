@@ -1,7 +1,6 @@
 """
-Code for testing the Fourier Series Filter (FSF)
-Same as se2_door_filter_legacy.py, but uses the FSF
-instead of the histogram filter
+Original code for the "Harmonic Exp. Filter" paper
+- added some comments and renamed symbols
 """
 
 from typing import Optional
@@ -24,7 +23,7 @@ from src.distributions.se2_distributions import SE2, SE2Gaussian
 from src.filters.hef import HarmonicExponentialFilter
 from src.filters.range_ekf import BearingEKF
 from src.filters.range_pf import BearingPF
-from src.filters.fsf import FourierSeriesFilter
+from src.filters.range_histf import BearingHistF
 
 from src.sampler.se2_sampler import se2_grid_samples
 from src.utils.create_video import create_mp4
@@ -59,7 +58,7 @@ def main(cfg: DictConfig) -> Optional[float]:
 
     # Hyperparameters
     grid_size = cfg.filter.grid_size
-    pose_grid, x, y, theta = se2_grid_samples(grid_size)
+    poses, x, y, theta = se2_grid_samples(grid_size)
 
     fft = SE2_FFT(
         spatial_grid_size=grid_size,
@@ -86,7 +85,7 @@ def main(cfg: DictConfig) -> Optional[float]:
         offset_y=offset_y,
         doors_blacklist=doors_blacklist,
         motion_noise=motion_noise,
-        pose_grid=pose_grid,
+        pose_grid=poses,
         measurement_noise=measurement_noise,
     )
 
@@ -94,7 +93,7 @@ def main(cfg: DictConfig) -> Optional[float]:
     mu_prior = simulator.position.parameters()
     cov_prior = np.diag(cfg.filter.var_prior)
 
-    prior = SE2Gaussian(mu_prior, cov_prior, samples=pose_grid, fft=fft)
+    prior = SE2Gaussian(mu_prior, cov_prior, samples=poses, fft=fft)
     prior.normalize()
 
     # Initialize filters
@@ -106,25 +105,25 @@ def main(cfg: DictConfig) -> Optional[float]:
         n_particles=np.prod(grid_size),
         d_door2pose=d_door2pose,
     )
-    fsf = FourierSeriesFilter(
+    histf = BearingHistF(
         prior=mu_prior,
         prior_cov=cov_prior,
-        grid_samples=pose_grid,
-        # grid_size=grid_size,
-        # d_door2pose=d_door2pose,
+        grid_samples=poses,
+        grid_size=grid_size,
+        d_door2pose=d_door2pose,
     )
 
     # For logging
     mean_trajectory = dict(
         HEF=np.zeros((simulator.n_samples, 3)),
         EKF=np.zeros((simulator.n_samples, 3)),
-        FSF=np.zeros((simulator.n_samples, 3)),
+        HistF=np.zeros((simulator.n_samples, 3)),
         PF=np.zeros((simulator.n_samples, 3)),
         Measurement=np.zeros((simulator.n_samples, 3)),
         GT=np.zeros((simulator.n_samples, 3)),
     )
     mode_trajectory = deepcopy(mean_trajectory)
-    nll = dict(HEF=[], EKF=[], FSF=[], PF=[], Measurement=[])
+    nll = dict(HEF=[], EKF=[], HistF=[], PF=[], Measurement=[])
 
     # Populate the first entry with prior pose
     gt_pose = simulator.position.parameters()
@@ -137,9 +136,9 @@ def main(cfg: DictConfig) -> Optional[float]:
                                               gt_pose, grid_size).item())
     nll["EKF"].append(ekf.neg_log_likelihood(gt_pose))
     nll["PF"].append(pf.neg_log_likelihood(gt_pose, (-0.5, 0.5), grid_size))
-    nll["FSF"].append(fsf.neg_log_likelihood(gt_pose))
+    nll["HistF"].append(histf.neg_log_likelihood(gt_pose))
 
-    for it in tqdm(range(5), desc="Filtering door dataset..."):
+    for it in tqdm(range(275), desc="Filtering door dataset..."):
         ### Predict step ###
         motion_distribution = simulator.motion()
         motion_cov = np.linalg.inv(motion_distribution.inv_cov)
@@ -153,7 +152,7 @@ def main(cfg: DictConfig) -> Optional[float]:
             step=motion_distribution.mu,
             step_cov=motion_cov,
         )
-        fsf.prediction(
+        histf.prediction(
             step=motion_distribution.mu,
             step_cov=motion_cov,
         )
@@ -166,18 +165,18 @@ def main(cfg: DictConfig) -> Optional[float]:
 
         # "Expected/Maximum Likelihood Filter" (no prior info.)
         mean_trajectory["Measurement"][it] = compute_weighted_mean(
-            measurement_distribution.prob, pose_grid, x, y, theta)
-        mode_trajectory["Measurement"][it] = compute_mode(measurement_distribution.prob, pose_grid)
+            measurement_distribution.prob, poses, x, y, theta)
+        mode_trajectory["Measurement"][it] = compute_mode(measurement_distribution.prob, poses)
         nll["Measurement"].append(simulator.neg_log_likelihood(gt_pose))
         # Harmonic Exponential Filter (HEF)
         hef_posterior, _ = hef.update(
             measurement_model=measurement_distribution
         )
         hef_mean = compute_weighted_mean(
-            hef_posterior.prob, pose_grid, x, y, theta
+            hef_posterior.prob, poses, x, y, theta
         )
         mean_trajectory["HEF"][it] = hef_mean
-        hef_mode = compute_mode(hef_posterior.prob, pose_grid)
+        hef_mode = compute_mode(hef_posterior.prob, poses)
         mode_trajectory["HEF"][it] = hef_mode
         nll['HEF'].append(hef.neg_log_likelihood2(hef_posterior.energy, hef_posterior.l_n_z, gt_pose, grid_size).item())
         # Extended Kalman Filter (EKF)
@@ -199,19 +198,17 @@ def main(cfg: DictConfig) -> Optional[float]:
         pf_mode = pf.compute_mode()
         mode_trajectory["PF"][it] = pf_mode
         nll["PF"].append(pf.neg_log_likelihood(gt_pose, (-0.5, 0.5), grid_size))
-        # Fourier Series Filter (FSF)
-        # TODO
-        fsf.update(
+        # Histogram Filter (HistF)
+        histf_mean = histf.update(
             landmarks=np.array(simulator.doors),
             map_mask=simulator.map_mask,
             observations=simulator.bearing_bins[simulator.iteration],
             observations_cov=np.ones(len(simulator.doors)) * simulator.measurement_cov,
         )
-        fsf_mean = fsf.compute_mean()
-        fsf_mode = fsf.compute_mode()
-        mean_trajectory["FSF"][it] = fsf_mean
-        mode_trajectory["FSF"][it] = fsf_mode
-        nll["FSF"].append(fsf.neg_log_likelihood(gt_pose))
+        mean_trajectory["HistF"][it] = histf_mean
+        histf_mode = histf.compute_mode()
+        mode_trajectory["HistF"][it] = histf_mode
+        nll["HistF"].append(histf.neg_log_likelihood(gt_pose))
 
         if make_video:
             ### Plotting ###
@@ -245,7 +242,7 @@ def main(cfg: DictConfig) -> Optional[float]:
                     "HEF": [hef_mean, hef_posterior.prob.real, hef_mode],
                     "EKF": [ekf_mean, ekf_pos_cov, ekf_mean],
                     "PF": [pf_mean, pf.particles, pf_mode],
-                    "FSF": [fsf_mean, fsf.prior.reshape(grid_size), fsf_mode],
+                    "HistF": [histf_mean, histf.prior.reshape(grid_size), histf_mode],
                     "GT": [gt_pose, None],
                 },
                 x, y, theta,
@@ -254,21 +251,21 @@ def main(cfg: DictConfig) -> Optional[float]:
                     f"Harmonic Exponential Filter",
                     f"Extended Kalman Filter",
                     f"Particle Filter",
-                    f"Fourier Series Filter",
+                    f"Histogram Filter",
                 ],
                 config=plt_cfg.CONFIG_FILTERS_SE2_UWB,
             )
             for ax_filter in axes_filters:
                 # Plot landmark name on each beacon for ax_filter'
-                # door_font_size = 9
-                # for i in range(len(simulator.doors)):
-                #     ax_filter.text(
-                #         simulator.doors[i][0] + 5e-2,
-                #         simulator.doors[i][1],
-                #         f"D{i + 1}",
-                #         fontsize=door_font_size, color="black",
-                #         horizontalalignment="center",
-                #         verticalalignment="center")
+                door_font_size = 9
+                for i in range(len(simulator.doors)):
+                    ax_filter.text(
+                        simulator.doors[i][0] + 5e-2,
+                        simulator.doors[i][1],
+                        f"D{i + 1}",
+                        fontsize=door_font_size, color="black",
+                        horizontalalignment="center",
+                        verticalalignment="center")
                 # Plot map
                 ax_filter.imshow(
                     simulator.map_array[2],
@@ -285,56 +282,56 @@ def main(cfg: DictConfig) -> Optional[float]:
                 )
 
             for ax in axes_means + axes_modes + axes_filters:
-                ax.set_xlim(-0.45, 0.45)
-                ax.set_ylim(-0.45, 0.45)
+                ax.set_xlim(-0.5, 0.5)
+                ax.set_ylim(-0.5, 0.5)
                 
-            # for i in range(len(simulator.doors)):
-            #     axes_means[3].text(
-            #         simulator.doors[i][0] + 2.5e-2,
-            #         simulator.doors[i][1],
-            #         f"D{i + 1}",
-            #         fontsize=door_font_size,
-            #         color="black",
-            #     )
-            #     axes_modes[3].text(
-            #         simulator.doors[i][0] + 2.5e-2,
-            #         simulator.doors[i][1],
-            #         f"D{i + 1}",
-            #         fontsize=door_font_size,
-            #         color="black",
-            #     )
+            for i in range(len(simulator.doors)):
+                axes_means[3].text(
+                    simulator.doors[i][0] + 2.5e-2,
+                    simulator.doors[i][1],
+                    f"D{i + 1}",
+                    fontsize=door_font_size,
+                    color="black",
+                )
+                axes_modes[3].text(
+                    simulator.doors[i][0] + 2.5e-2,
+                    simulator.doors[i][1],
+                    f"D{i + 1}",
+                    fontsize=door_font_size,
+                    color="black",
+                )
             
             # dead_reckoning = simulator.position.parameters()
             # axes_means[3].scatter(dead_reckoning[0], dead_reckoning[1], 
-                                # marker='o', s=10,  c='k', zorder=4)
-            map_alpha = 0.7
-            axes_means[3].imshow(
-                simulator.map_array[2],
-                extent=[
-                    simulator.map_array[0].min(),
-                    simulator.map_array[0].max(),
-                    simulator.map_array[1].min(),
-                    simulator.map_array[1].max(),
-                ],
-                origin="upper",
-                cmap=plt.cm.Greys_r,
-                alpha=map_alpha,
-                zorder=2,
-            )
+            #                     marker='o', s=10,  c='k', zorder=4)
+            # map_alpha = 0.8
+            # axes_means[3].imshow(
+            #     simulator.map_array[2],
+            #     extent=[
+            #         simulator.map_array[0].min(),
+            #         simulator.map_array[0].max(),
+            #         simulator.map_array[1].min(),
+            #         simulator.map_array[1].max(),
+            #     ],
+            #     origin="upper",
+            #     cmap=plt.cm.Greys_r,
+            #     alpha=map_alpha,
+            #     zorder=2,
+            # )
             # axes_modes[3].scatter(dead_reckoning[0], dead_reckoning[1], marker='o', s=30,  c='k', zorder=4)
-            axes_modes[3].imshow(
-                simulator.map_array[2],
-                extent=[
-                    simulator.map_array[0].min(),
-                    simulator.map_array[0].max(),
-                    simulator.map_array[1].min(),
-                    simulator.map_array[1].max(),
-                ],
-                origin="upper",
-                cmap=plt.cm.Greys_r,
-                alpha=map_alpha,
-                zorder=2,
-            )
+            # axes_modes[3].imshow(
+            #     simulator.map_array[2],
+            #     extent=[
+            #         simulator.map_array[0].min(),
+            #         simulator.map_array[0].max(),
+            #         simulator.map_array[1].min(),
+            #         simulator.map_array[1].max(),
+            #     ],
+            #     origin="upper",
+            #     cmap=plt.cm.Greys_r,
+            #     alpha=map_alpha,
+            #     zorder=2,
+            # )
             axes_means[3].set_title(f"EAP (Mean) - Timestep {it}", fontdict={'fontsize': 18})
             axes_modes[3].set_title(f"MAP (Mode) - Timestep {it}", fontdict={'fontsize': 18})
             
@@ -430,7 +427,7 @@ def main(cfg: DictConfig) -> Optional[float]:
     plt.savefig(f"{others_path}/se2_traj.png")
     plt.close()
     # Create video
-    if cfg.get("duration"):
+    if cfg.get("duration") and make_video:
         create_mp4(results_path, "result.mp4", duration=cfg.duration)
     
     # Log information to the logger (if available)

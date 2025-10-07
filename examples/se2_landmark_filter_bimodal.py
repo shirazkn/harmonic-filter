@@ -13,9 +13,9 @@ from copy import deepcopy
 
 from src.spectral.se2_fft import SE2_FFT
 from src.distributions.se2_distributions import SE2, SE2MultimodalGaussian
-from src.filters.bayes_filter import BayesFilter
+from src.filters.hef import HarmonicExponentialFilter
 from src.filters.range_ekf import RangeEKFBimodal
-from src.filters.range_hf import RangeHFBimodal
+from src.filters.range_histf import RangeHFBimodal
 from src.filters.range_pf import RangePFBimodal
 from src.groups.se2_group import SE2Group
 from src.sampler.se2_sampler import se2_grid_samples
@@ -69,7 +69,7 @@ def main(cfg: DictConfig) -> Optional[float]:
     )
     prior = SE2MultimodalGaussian(mus, covs, samples=poses, fft=fft)
     prior.normalize()
-    filter = BayesFilter(distribution=SE2, prior=prior)
+    filter = HarmonicExponentialFilter(distribution=SE2, prior=prior)
     # Define Kalman Filter as baseline
     ekf = RangeEKFBimodal(priors=mus, priors_cov=covs, grid_size=grid_size)
     hf = RangeHFBimodal(priors=mus, priors_cov=covs, grid_samples=poses, grid_size=grid_size)

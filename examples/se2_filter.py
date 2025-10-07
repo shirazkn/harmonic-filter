@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 from src.spectral.se2_fft import SE2_FFT
 from src.distributions.se2_distributions import SE2, SE2Gaussian
-from src.filters.bayes_filter import BayesFilter
+from src.filters.hef import HarmonicExponentialFilter
 from src.groups.se2_group import SE2Group
 from src.sampler.se2_sampler import se2_grid_samples
 from src.simulators.se2_simple_simulator import SE2SimpleSimulator
@@ -47,7 +47,7 @@ def main(cfg: DictConfig) -> Optional[float]:
     # Motion and measurement noise
     motion_noise, measurement_noise = np.ones(3) * np.sqrt(var_motion), np.ones(3) * np.sqrt(var_measurement)
     prior = SE2Gaussian(mu_1, cov_1, samples=poses, fft=fft)
-    filter = BayesFilter(distribution=SE2, prior=prior)
+    filter = HarmonicExponentialFilter(distribution=SE2, prior=prior)
     simulator = SE2SimpleSimulator(
         start=SE2Group.from_parameters(*mu_1),
         step=SE2Group.from_parameters(0.025, 0.01, np.pi / 20.0),

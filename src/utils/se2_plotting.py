@@ -161,7 +161,7 @@ def plot_beacons(beacons: np.ndarray, ax: plt.Axes, color: str = 'dimgrey', mark
     :param color: Color of the beacons
     :param marker: Marker of the beacons
     """
-    ax.scatter(beacons[:, 0], beacons[:, 1], c=color, marker=marker, alpha=1.0, s=150, edgecolor='k', linewidths=1)
+    ax.scatter(beacons[:, 0], beacons[:, 1], c=color, marker=marker, alpha=1.0, s=100, edgecolor='k', linewidths=1)
 
 
 def plot_se2_filters(filters: Dict[str, List[np.ndarray]],
@@ -176,7 +176,7 @@ def plot_se2_filters(filters: Dict[str, List[np.ndarray]],
 
     The result of each filter is a tuple of (mean, covariance/samples) which are used to represent its uncertainty. For
     each plot, the heading is marginalized
-    :param filters: Dictionary where each key contains a filter (e.g., HEF, EKF, PF, HistF) in a list. The first element
+    :param filters: Dictionary where each key contains a filter (e.g., HEF, EKF, PF, HistF or FSF) in a list. The first element
     is its mean and the second element is its covariance/samples. It is possible to add not only samples but other
     values which will be plotted as well such as ground truth.
     :param x: x values of the grid
@@ -249,18 +249,27 @@ def plot_se2_filters(filters: Dict[str, List[np.ndarray]],
     ax3.scatter(pf[1][idx, 0], pf[1][idx, 1], c=c['c'], s=30, alpha=0.2, marker=c['marker'], zorder=0)
 
     ### Plot HF ###
-    for c in cfg:
-        if c.get('f_name') == 'HistF':
-            break
+    if 'HistF' in filters:
+        filter4 = filters['HistF']
+        for c in cfg:
+            if c.get('f_name') == 'HistF':
+                break
+        
+    else:
+        filter4 = filters['FSF']
+        for c in cfg:
+            if c.get('f_name') == 'FSF':
+                break
+            
     c.pop('f_name')
     cmap = c.pop('cmap')
-    hf = filters['HistF']
-    ax4.scatter(hf[0][0], hf[0][1], **c)
+
+    ax4.scatter(filter4[0][0], filter4[0][1], **c)
     c["label"] = "Mode"
     c["edgecolor"] = "honeydew"
     c["lw"] = 1.5
-    ax4.scatter(hf[2][0], hf[2][1], **c)
-    hf_posterior = hf[1].sum(-1)
+    ax4.scatter(filter4[2][0], filter4[2][1], **c)
+    hf_posterior = filter4[1].sum(-1)
     max_value, min_value = hf_posterior.max(), hf_posterior.min()
     hf_posterior = (hf_posterior - min_value) / (max_value - min_value)
     ax4.pcolormesh(x, y, hf_posterior, shading='auto', cmap=cmap, zorder=0, vmin=0, vmax=1.0)
@@ -774,18 +783,27 @@ def plot_se2_bananas(filters: Dict[str, List[np.ndarray]],
     ax5.legend(loc='upper right', fancybox=True, framealpha=1, shadow=True, borderpad=0.5, fontsize="13")
 
     ### Plot HF ###
-    for c in cfg:
-        if c.get('f_name') == 'HistF':
-            break
+    if 'HistF' in filters:
+        filter4 = filters['HistF']
+        for c in cfg:
+            if c.get('f_name') == 'HistF':
+                break
+        
+    else:
+        filter4 = filters['FSF']
+        for c in cfg:
+            if c.get('f_name') == 'FSF':
+                break
+
     c.pop('f_name')
     cmap = c.pop('cmap')
-    hf = filters['HistF']
-    ax6.scatter(hf[0][0], hf[0][1], **c)
+
+    ax6.scatter(filter4[0][0], filter4[0][1], **c)
     c["label"] = "Mode"
     c["edgecolor"] = "honeydew"
     c["linewidth"] = 1.5
-    ax6.scatter(hf[2][0], hf[2][1], **c)
-    hf_posterior = hf[1].sum(-1)
+    ax6.scatter(filter4[2][0], filter4[2][1], **c)
+    hf_posterior = filter4[1].sum(-1)
     max_value, min_value = hf_posterior.max(), hf_posterior.min()
     hf_posterior = (hf_posterior - min_value) / (max_value - min_value)
     ax6.pcolormesh(x, y, hf_posterior, shading='auto', cmap=cmap, zorder=0, vmin=0, vmax=1.0)

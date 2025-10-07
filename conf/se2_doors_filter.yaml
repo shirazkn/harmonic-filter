@@ -1,10 +1,10 @@
 defaults:
-  - _self_                                      # Override default config with derived ones
-  - logger: null                                # set logger, options are [null, comet]
-  - log_dir: default                       # set logging directory for hydra/logger
+  - _self_                        # Override default config with derived ones
+  - logger: null                  # set logger, options are [null, comet]
+  - log_dir: default              # set logging directory for hydra/logger
 
   # config for hyperparameter optimization and launcher -- use it with --multirun flag
-  - launcher: local                              # launcher used for the job, options are [remote, local, null]
+  - launcher: local               # launcher used for the job, options are [remote, local, null]
 
     # enable color logging
   - override hydra/hydra_logging: colorlog      # Pretty colors
@@ -50,3 +50,5 @@ filter:
 
 # Video params
 duration: 50   # Duration of each frame in milliseconds
+
+make_video: True

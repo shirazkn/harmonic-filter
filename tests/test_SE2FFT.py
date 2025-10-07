@@ -3,7 +3,7 @@ import timeit
 
 import numpy as np
 
-from src.spectral.se2_fft import SE2_FFT, shift_fft, shift_ifft
+from src.spectral.se2_fft import SE2_FFT, shift_fft2, shift_ifft2
 from src.distributions.se2_distributions import SE2Gaussian
 from src.sampler.se2_sampler import se2_grid_samples
 
@@ -82,8 +82,8 @@ class TestSE2FFT(unittest.TestCase):
         f = np.zeros(size)
         f[19:21, 10:30, :] = 1.
 
-        f1 = shift_fft(f)
-        fi = shift_ifft(f1)
+        f1 = shift_fft2(f)
+        fi = shift_ifft2(f1)
 
         self.assertTrue(np.sum(np.abs(f - fi)) < 1e-5)
 

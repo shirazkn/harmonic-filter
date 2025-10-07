@@ -34,7 +34,7 @@ class SE2DoorDataset(Simulator):
         offset_x: float = -2.19,
         offset_y: float = -2.19,
         doors_blacklist: List = [],
-        samples: Optional[np.ndarray] = None,
+        pose_grid: Optional[np.ndarray] = None,
         fft: FFTBase = None,
         **kwargs,
     ):
@@ -48,7 +48,7 @@ class SE2DoorDataset(Simulator):
         self.offset_y = offset_y
         self.doors_blacklist = doors_blacklist
         self.iteration = -1
-        self.samples = samples
+        self.pose_grid = pose_grid
         self.fft = fft
         # Set motion and measurement covariance
         self.motion_cov = np.diag(self.motion_noise**2)
@@ -88,7 +88,7 @@ class SE2DoorDataset(Simulator):
         self.position = self.position @ step
 
         return SE2Gaussian(
-            step.parameters(), self.motion_cov, samples=self.samples, fft=self.fft
+            step.parameters(), self.motion_cov, samples=self.pose_grid, fft=self.fft
         )
 
     def measurement(self) -> SE2:
@@ -103,10 +103,10 @@ class SE2DoorDataset(Simulator):
         ### independent measurements but p(z_{t,i} | x_t, m) is a mixture of n_doors components ###
         for i, obs in enumerate(bearing_measurements):
             diff = rearrange(self.doors, "n m -> n 1 m") - rearrange(
-                self.samples[:, :2], "p m -> 1 p m"
+                self.pose_grid[:, :2], "p m -> 1 p m"
             )
             angle = np.arctan2(diff[:, :, 1], diff[:, :, 0]) - (
-                (self.samples[:, 2] + np.pi) % (2 * np.pi) - np.pi
+                (self.pose_grid[:, 2] + np.pi) % (2 * np.pi) - np.pi
             )
             # Wrap angle.
             angle = (angle + np.pi) % (2 * np.pi) - np.pi
@@ -144,7 +144,7 @@ class SE2DoorDataset(Simulator):
             diff_angle = obs - angle
             diff_angle = (diff_angle + np.pi) % (2 * np.pi) - np.pi
             # Get weight for current sample
-            id = np.argmin(np.linalg.norm((self.samples[:, :2] - pose[:2]), axis=1))
+            id = np.argmin(np.linalg.norm((self.pose_grid[:, :2] - pose[:2]), axis=1))
             weight = self.map_mask[id]
             # Sum along components dimension
             mixture = weight * norm(diff_angle, observations_std).pdf(0.0)
@@ -210,7 +210,7 @@ class SE2DoorDataset(Simulator):
         # Scale data
         self._scale_data()
         # Once everything is scaled, preprocess mask
-        self.map_mask = preprocess_mask(self.map_mask, self.samples, )
+        self.map_mask = preprocess_mask(self.map_mask, self.pose_grid, )
 
 
     def _compute_relative(self, transform_AB, transform_AC):

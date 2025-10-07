@@ -5,12 +5,12 @@ import matplotlib.pyplot as plt
 
 from src.spectral.se2_fft import SE2_FFT
 from src.distributions.se2_distributions import SE2, SE2Gaussian, SE2Square
-from src.filters.bayes_filter import BayesFilter
+from src.filters.hef import HarmonicExponentialFilter
 from src.filters.range_ekf import RangeEKF
 from src.filters.range_iekf import RangeIEKF
 from src.filters.iekf_utils import IEKFUtils, ExpSE2
 from src.filters.range_pf import RangePF
-from src.filters.range_hf import RangeHF
+from src.filters.range_histf import RangeHistF
 from src.sampler.se2_sampler import se2_grid_samples
 from src.utils.se2_plotting import plot_se2_bananas
 from src.utils.statistics import compute_weighted_mean, compute_mode
@@ -78,7 +78,7 @@ def main():
     step = SE2Gaussian(mu, cov, samples=poses, fft=fft)
 
     # Create filters
-    hef = BayesFilter(distribution=SE2, prior=belief)
+    hef = HarmonicExponentialFilter(distribution=SE2, prior=belief)
     # Define Kalman Filter as baseline - Gaussian assumption does not allow for square dist.
     ekf = RangeEKF(prior=mu_belief, prior_cov=cov_belief)
     iekf = RangeIEKF(IEKFUtils(), prior=mu_belief, prior_cov=iekf_cov_belief)
@@ -88,7 +88,7 @@ def main():
         x_limits, y_limits, theta_limits, mu_belief, cov_belief, np.prod(size)
     )
     # Update prior of histogram to be square-like
-    hf = RangeHF(
+    hf = RangeHistF(
         prior=mu_belief, prior_cov=cov_belief, grid_samples=poses, grid_size=size
     )
     hf.prior = (belief.energy / belief.energy.sum()).flatten()

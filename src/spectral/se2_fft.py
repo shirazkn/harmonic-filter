@@ -9,7 +9,7 @@ from src.spectral.base_fft import FFTBase
 
 def map_wrap(f, coords):
 
-    # Create an agumented array, where the last row and column are added at the beginning of the axes
+    # Create an agumented array, where the first row and column are added to the end of the axes
     fa = np.empty((f.shape[0] + 1, f.shape[1] + 1))
     fa[:-1, :-1] = f
     fa[-1, :-1] = f[0, :]
@@ -26,29 +26,29 @@ def map_wrap(f, coords):
     return map_coordinates(fa, wrapped_coords, order=1, mode='constant', cval=np.nan, prefilter=False)
 
 
-def shift_fft(f):
+def shift_fft2(f):
     nx = f.shape[0]
     ny = f.shape[1]
-    p0 = nx // 2
-    q0 = ny // 2
+    nx_half = nx // 2
+    ny_half = ny // 2
 
-    X, Y = np.meshgrid(np.arange(p0, p0 + nx, dtype=int) % nx,
-                       np.arange(q0, q0 + ny, dtype=int) % ny,
+    X, Y = np.meshgrid(np.arange(nx_half, nx_half + nx, dtype=int) % nx,
+                       np.arange(ny_half, ny_half + ny, dtype=int) % ny,
                        indexing='ij')
     fs = f[X, Y, ...]
-    # Compute the Fourier Transform of the discretely sampled function f : T^2 -> C.
+    # Compute the Fourier Transform of the discretely sampled function f : T^2 -> C. Also see [https://stackoverflow.com/questions/5398304/fourier-transform-of-a-gaussian-is-not-a-gaussian-but-thats-wrong-python/5398901#5398901]
     f_hat = fftshift(fft2(fs, axes=(0, 1)), axes=(0, 1))
 
     return f_hat / np.prod(f.shape[:2]) # np.prod([f.shape[ax] for ax in (0, 1)])
 
-def shift_ifft(fh):
+def shift_ifft2(fh):
     nx = fh.shape[0]
     ny = fh.shape[1]
-    p0 = nx // 2
-    q0 = ny // 2
+    nx_half = nx // 2
+    ny_half = ny // 2
 
-    X, Y = np.meshgrid(np.arange(-p0, -p0 + nx, dtype=int) % nx,
-                       np.arange(-q0, -q0 + ny, dtype=int) % ny,
+    X, Y = np.meshgrid(np.arange(-nx_half, -nx_half + nx, dtype=int) % nx,
+                       np.arange(-ny_half, -ny_half + ny, dtype=int) % ny,
                        indexing='ij')
 
     # Inverse FFT in T2
@@ -167,7 +167,7 @@ class SE2_FFT(FFTBase):
         #phase = np.exp(-2 * np.pi * 1j * delta * (XI1 + XI2))
         #f1c = f1c_shift * phase[:, :, None]
 
-        f1c = shift_fft(f)
+        f1c = shift_fft2(f)
 
         # Change from Cartesian (c) to a polar (p) grid:
         f1p = self.resample_c2p_3d(f1c)
@@ -220,7 +220,7 @@ class SE2_FFT(FFTBase):
 
         #f = T2FFT.synthesize(f1c, axes=(0, 1))
         #f = T2FFT.synthesize(f1c_shift, axes=(0, 1))
-        f = shift_ifft(f1c)
+        f = shift_ifft2(f1c)
 
 
         return f, f1c, f1p, f2, f2f, f_hat

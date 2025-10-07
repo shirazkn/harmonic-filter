@@ -12,7 +12,7 @@ from scipy.special import logsumexp
 import matplotlib.pyplot as plt
 
 
-class RangeHF:
+class RangeHistF:
     def __init__(self,
                  prior: np.ndarray,
                  prior_cov: np.ndarray,
@@ -177,7 +177,7 @@ class RangeHF:
         return -ll
 
 
-class RangeHFBimodal(RangeHF):
+class RangeHFBimodal(RangeHistF):
     def __init__(self,
                  priors: np.ndarray,
                  priors_cov: np.ndarray,
@@ -211,7 +211,7 @@ class RangeHFBimodal(RangeHF):
         return super().update(landmarks, observations, observations_cov)
     
 
-class BearingHF(RangeHF):
+class BearingHistF(RangeHistF):
     def __init__(self, d_door2pose: float = 0.1, **kwargs):
         """
         :param prior: a prior pose of as a numpy array of dimension (3,)

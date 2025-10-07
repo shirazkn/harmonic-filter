@@ -4,7 +4,7 @@ import numpy as np
 from scipy.stats import multivariate_normal
 
 from src.spectral.se2_fft import SE2_FFT
-from src.filters.bayes_filter import BayesFilter
+from src.filters.hef import HarmonicExponentialFilter
 from src.distributions.se2_distributions import SE2Gaussian
 from src.sampler.se2_sampler import se2_grid_samples
 
@@ -35,9 +35,9 @@ class TestSE2Moments(unittest.TestCase):
         # FFT of the energy
         _, _, _, _, _, fh = fft.analyze(np.exp(energy))
 
-        p_energy = np.exp(-BayesFilter.neg_log_likelihood(gaussian.eta, gaussian.l_n_z, poses, fft))
-        p_m = -BayesFilter.neg_log_likelihood(gaussian.M, 0.0, poses, fft)
-        p_moments = -BayesFilter.neg_log_likelihood(gaussian.moments, 0.0, poses, fft)
+        p_energy = np.exp(-HarmonicExponentialFilter.neg_log_likelihood(gaussian.eta, gaussian.l_n_z, poses, fft))
+        p_m = -HarmonicExponentialFilter.neg_log_likelihood(gaussian.M, 0.0, poses, fft)
+        p_moments = -HarmonicExponentialFilter.neg_log_likelihood(gaussian.moments, 0.0, poses, fft)
         print("---")
         print(f"Mean: {mu}")
         print(f"Diag. covariance: {np.diag(cov)}")

@@ -12,7 +12,7 @@ from src.distributions.distribution_base import HarmonicExponentialDistribution
 from src.spectral.se2_fft import SE2_FFT
 
 
-class BayesFilter:
+class HarmonicExponentialFilter:
     def __init__(
         self,
         distribution: Type[HarmonicExponentialDistribution],

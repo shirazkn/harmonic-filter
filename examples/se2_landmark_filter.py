@@ -13,9 +13,9 @@ from copy import deepcopy
 
 from src.spectral.se2_fft import SE2_FFT
 from src.distributions.se2_distributions import SE2, SE2Gaussian
-from src.filters.bayes_filter import BayesFilter
+from src.filters.hef import HarmonicExponentialFilter
 from src.filters.range_ekf import RangeEKF
-from src.filters.range_hf import RangeHF
+from src.filters.range_histf import RangeHistF
 from src.filters.range_pf import RangePF
 from src.groups.se2_group import SE2Group
 from src.sampler.se2_sampler import se2_grid_samples
@@ -69,10 +69,10 @@ def main(cfg: DictConfig) -> Optional[float]:
     )
     prior = SE2Gaussian(mu_1, cov_1, samples=poses, fft=fft)
     prior.normalize()
-    filter = BayesFilter(distribution=SE2, prior=prior)
+    filter = HarmonicExponentialFilter(distribution=SE2, prior=prior)
     # Define Kalman Filter as baseline
     ekf = RangeEKF(prior=mu_1, prior_cov=cov_1)
-    hf = RangeHF(prior=mu_1, prior_cov=cov_1, grid_samples=poses, grid_size=grid_size)
+    hf = RangeHistF(prior=mu_1, prior_cov=cov_1, grid_samples=poses, grid_size=grid_size)
     pf = RangePF(prior=mu_1, prior_cov=cov_1, n_particles=np.prod(grid_size))
     simulator = SE2RangeSimulator(
         start=SE2Group.from_parameters(*mu_1),

@@ -36,14 +36,18 @@ class RangePF:
         :return Mean and covariance of belief
         """
         # sample steps
-        step = (np.linalg.cholesky(step_cov) @ np.random.randn(3, self._N)).T + step
-        step[:, 2] = (step[:, 2] + np.pi) % (2 * np.pi) - np.pi
+        step = (np.linalg.cholesky(step_cov) 
+                @ np.random.randn(3, self._N)).T + step
+        # step[:, 2] = (step[:, 2] + np.pi) % (2 * np.pi) - np.pi
+        
         # Apply step
         c = np.cos(self.particles[:, 2])
         s = np.sin(self.particles[:, 2])
         self.particles[:, 0] += c * step[:, 0] - s * step[:, 1]
         self.particles[:, 1] += s * step[:, 0] + c * step[:, 1]
         self.particles[:, 2] += step[:, 2]
+        
+        # Clip angles to [-π,π]
         self.particles[:, 2] = (self.particles[:, 2] + np.pi) % (2 * np.pi) - np.pi
 
     def update(self,
