@@ -144,12 +144,13 @@ def main(cfg: DictConfig) -> Optional[float]:
     nll["PF"].append(pf.neg_log_likelihood(gt_pose, (-0.5, 0.5), grid_size))
     nll["FSF"].append(fsf.neg_log_likelihood(gt_pose))
 
-    for it in tqdm(range(10), desc="Filtering door dataset..."):
+    for it in tqdm(range(30), desc="Filtering door dataset..."):
         ### Predict step ###
         motion_distribution = simulator.motion()
         motion_cov = np.linalg.inv(motion_distribution.inv_cov)
 
         hef_pred = hef.prediction(motion_model=motion_distribution)
+
         ekf.prediction(
             step=motion_distribution.mu,
             step_cov=motion_cov,
@@ -297,10 +298,15 @@ def main(cfg: DictConfig) -> Optional[float]:
                 alpha=map_alpha,
                 zorder=-11,
             )
-            # dead_reckoning = simulator.position.parameters()
-            # axes_means[3].scatter(dead_reckoning[0], dead_reckoning[1], 
-                                # marker='o', s=10,  c='k', zorder=4)
-            # axes_modes[3].scatter(dead_reckoning[0], dead_reckoning[1], marker='o', s=30,  c='k', zorder=4)
+            axes_means[3].scatter(gt_pose[0], gt_pose[1], 
+                                marker='o', s=10,  c='k', zorder=4)
+            axes_modes[3].scatter(gt_pose[0], gt_pose[1], marker='o', s=30,  c='k', zorder=4)
+            
+            dead_reckoning = gt_pose + motion_distribution.mu
+            axes_means[3].scatter(dead_reckoning[0], dead_reckoning[1], 
+                                marker='o', s=10,  c='k', zorder=4)
+            axes_modes[3].scatter(dead_reckoning[0], dead_reckoning[1], marker='o', s=30,  c='k', zorder=4)
+            
             axes_modes[3].imshow(
                 simulator.map_array[2],
                 extent=[

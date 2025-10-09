@@ -253,7 +253,7 @@ def plot_se2_filters(filters: Dict[str, List[np.ndarray]],
     c["edgecolor"] = "honeydew"
     c["lw"] = 1.5
     ax3.scatter(pf[2][0], pf[2][1], **c)
-    ax3.scatter(pf[1][idx, 0], pf[1][idx, 1], c=c['c'], s=pf[-1][idx]*1e4, alpha=0.2, marker=c['marker'], zorder=0)
+    ax3.scatter(pf[1][idx, 0], pf[1][idx, 1], c=c['c'], s=pf[-1][idx]*5e4, alpha=0.2, zorder=0)
 
     ### Plot HF ###
     if 'HistF' in filters:

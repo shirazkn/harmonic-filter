@@ -36,7 +36,8 @@ data_dir: ${original_work_dir}/data/door_dataset/run2
 results_path: ${original_work_dir}/results
 # Sweep parameters
 filter:
-  grid_size: [50, 50, 32]
+  # grid_size: [50, 50, 32]
+  grid_size: [25, 25, 16]
   var_prior: [0.01, 0.01, 0.01]
   var_motion: 1e-3
   var_measurement: 5e-1

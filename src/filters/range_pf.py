@@ -62,13 +62,9 @@ class RangePF:
         :return Mean of the particles
         """
         observations_std = np.sqrt(observations_cov)
-        ### Not independent measurements ###
-        # weight = 1 / len(observations_std)
-        # for i, landmark in enumerate(landmarks):
-        #     dist = np.linalg.norm(self.particles[:, 0:2] - landmark, axis=1)
-        #     self.weights += norm(dist, observations_std[i]).pdf(observations[i]) * weight
         ### Independence between measurements ###
-        self.weights = np.log(self.weights + 1e-8)
+        self.weights.fill(1.0 / self._N)
+        self.weights = np.log(self.weights)
         for i, landmark in enumerate(landmarks):
             distance = np.linalg.norm(self.particles[:, 0:2] - landmark, axis=1)
             prob = norm(distance, observations_std[i]).pdf(observations[i]) + 1e-8
@@ -89,7 +85,6 @@ class RangePF:
         # resample according to indexes
         self.particles[:] = self.particles[indexes]
         self.mode_index = self.weights.argmax()
-        self.weights.fill(1.0 / self._N)
 
         return np.mean(self.particles, axis=0)
 
@@ -174,27 +169,32 @@ class BearingPF(RangePF):
         :return Mean of the particles
         """
         observations_std = np.sqrt(observations_cov)
+        mask = preprocess_mask(map_mask, self.particles)
+
+        self.weights.fill(1.)
         # Map weights temporarily to log space
-        self.weights = np.log(self.weights + 1e-9)
-        ### independent measurements but p(z_{t,i} | x_t, m) is a mixture of n_doors components ###
+        # self.weights = np.log(self.weights + 1e-9)
+        
+        # Assumes independent measurements 
+        # p(z_{t,i} | x_t, m) is a mixture of n_doors components
         for i, obs in enumerate(observations):
             diff =  rearrange(landmarks, "n m -> n 1 m") - rearrange(self.particles[:, :2], "p m -> 1 p m")
-            angle = np.arctan2(diff[:, :, 1], diff[:, :, 0]) - self.particles[:, 2]
-            # Wrap angle.
-            angle = (angle + np.pi) % (2 * np.pi) - np.pi
-            diff_angle = obs - angle
+            # Output of arctan2 is in (-π,π)
+            pred_angle = np.arctan2(diff[:, :, 1], diff[:, :, 0]) - self.particles[:, 2]
+            diff_angle = obs - pred_angle
+            # Wrap angle
             diff_angle = (diff_angle + np.pi) % (2 * np.pi) - np.pi
             # This mask will blackout particles outside map
-            mask = preprocess_mask(map_mask, self.particles)
-            mixture = mask * norm(diff_angle, rearrange(observations_std, "n -> n 1")).pdf(0.0)
-            mixture = mixture.max(0) + 1e-8
-            # max along components dimension
-            self.weights = np.maximum(self.weights, np.log(mixture))
+            mixture = norm(diff_angle, rearrange(observations_std, "n -> n 1")).pdf(0.0)
 
-        # Normalize weights
-        self.weights = np.where(mask == 0, -np.inf, self.weights) # Mask out particles outside map
-        self.weights -= logsumexp(self.weights)
-        self.weights = np.exp(self.weights)
+            mixture = mixture.sum(0) + 1e-8
+            # max along components dimension
+            # self.weights = np.maximum(self.weights, np.log(mixture))
+            self.weights *= mixture
+
+        self.weights = np.where(mask == 0, 0.0, self.weights) # Mask out particles outside map
+        self.weights /= np.sum(self.weights)
+        # self.weights = np.exp(self.weights)
 
         ## Resample
         cumulative_sum = np.cumsum(self.weights)
@@ -207,6 +207,5 @@ class BearingPF(RangePF):
         # resample according to indexes
         self.particles[:] = self.particles[indexes]
         self.mode_index = self.weights.argmax()
-        self.weights.fill(1.0 / self._N)
 
         return np.mean(self.particles, axis=0)
