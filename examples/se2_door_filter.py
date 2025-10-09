@@ -41,6 +41,11 @@ from src.utils.logging import seed_everything, get_logger, extras
 
 log = get_logger(__name__)
 
+for i in range(len(plt_cfg.CONFIG_MEAN_SE2_UWB)):
+    if plt_cfg.CONFIG_MEAN_SE2_UWB[i]['label'] == 'HistF':
+        plt_cfg.CONFIG_MEAN_SE2_UWB.pop(i)
+        break
+
 
 def main(cfg: DictConfig) -> Optional[float]:
     make_video = cfg.get("make_video")
@@ -139,7 +144,7 @@ def main(cfg: DictConfig) -> Optional[float]:
     nll["PF"].append(pf.neg_log_likelihood(gt_pose, (-0.5, 0.5), grid_size))
     nll["FSF"].append(fsf.neg_log_likelihood(gt_pose))
 
-    for it in tqdm(range(5), desc="Filtering door dataset..."):
+    for it in tqdm(range(10), desc="Filtering door dataset..."):
         ### Predict step ###
         motion_distribution = simulator.motion()
         motion_cov = np.linalg.inv(motion_distribution.inv_cov)
@@ -244,7 +249,7 @@ def main(cfg: DictConfig) -> Optional[float]:
                 {
                     "HEF": [hef_mean, hef_posterior.prob.real, hef_mode],
                     "EKF": [ekf_mean, ekf_pos_cov, ekf_mean],
-                    "PF": [pf_mean, pf.particles, pf_mode],
+                    "PF": [pf_mean, pf.particles, pf_mode, pf.weights],
                     "FSF": [fsf_mean, fsf.prior.reshape(grid_size), fsf_mode],
                     "GT": [gt_pose, None],
                 },
@@ -258,17 +263,8 @@ def main(cfg: DictConfig) -> Optional[float]:
                 ],
                 config=plt_cfg.CONFIG_FILTERS_SE2_UWB,
             )
+            map_alpha = 0.7
             for ax_filter in axes_filters:
-                # Plot landmark name on each beacon for ax_filter'
-                # door_font_size = 9
-                # for i in range(len(simulator.doors)):
-                #     ax_filter.text(
-                #         simulator.doors[i][0] + 5e-2,
-                #         simulator.doors[i][1],
-                #         f"D{i + 1}",
-                #         fontsize=door_font_size, color="black",
-                #         horizontalalignment="center",
-                #         verticalalignment="center")
                 # Plot map
                 ax_filter.imshow(
                     simulator.map_array[2],
@@ -280,34 +276,14 @@ def main(cfg: DictConfig) -> Optional[float]:
                     ],
                     origin="upper",
                     cmap=plt.cm.Greys_r,
-                    alpha=0.5,
-                    zorder=1,
+                    alpha=map_alpha,
+                    zorder=-11,
                 )
 
             for ax in axes_means + axes_modes + axes_filters:
                 ax.set_xlim(-0.45, 0.45)
                 ax.set_ylim(-0.45, 0.45)
-                
-            # for i in range(len(simulator.doors)):
-            #     axes_means[3].text(
-            #         simulator.doors[i][0] + 2.5e-2,
-            #         simulator.doors[i][1],
-            #         f"D{i + 1}",
-            #         fontsize=door_font_size,
-            #         color="black",
-            #     )
-            #     axes_modes[3].text(
-            #         simulator.doors[i][0] + 2.5e-2,
-            #         simulator.doors[i][1],
-            #         f"D{i + 1}",
-            #         fontsize=door_font_size,
-            #         color="black",
-            #     )
             
-            # dead_reckoning = simulator.position.parameters()
-            # axes_means[3].scatter(dead_reckoning[0], dead_reckoning[1], 
-                                # marker='o', s=10,  c='k', zorder=4)
-            map_alpha = 0.7
             axes_means[3].imshow(
                 simulator.map_array[2],
                 extent=[
@@ -319,8 +295,11 @@ def main(cfg: DictConfig) -> Optional[float]:
                 origin="upper",
                 cmap=plt.cm.Greys_r,
                 alpha=map_alpha,
-                zorder=2,
+                zorder=-11,
             )
+            # dead_reckoning = simulator.position.parameters()
+            # axes_means[3].scatter(dead_reckoning[0], dead_reckoning[1], 
+                                # marker='o', s=10,  c='k', zorder=4)
             # axes_modes[3].scatter(dead_reckoning[0], dead_reckoning[1], marker='o', s=30,  c='k', zorder=4)
             axes_modes[3].imshow(
                 simulator.map_array[2],
@@ -333,7 +312,7 @@ def main(cfg: DictConfig) -> Optional[float]:
                 origin="upper",
                 cmap=plt.cm.Greys_r,
                 alpha=map_alpha,
-                zorder=2,
+                zorder=-11
             )
             axes_means[3].set_title(f"EAP (Mean) - Timestep {it}", fontdict={'fontsize': 18})
             axes_modes[3].set_title(f"MAP (Mode) - Timestep {it}", fontdict={'fontsize': 18})
@@ -435,5 +414,8 @@ def main(cfg: DictConfig) -> Optional[float]:
     
     # Log information to the logger (if available)
     # log_experiment_info(cfg, results_path)
+
+    import subprocess
+    subprocess.run(["open", results_path])
 
     return 0.0

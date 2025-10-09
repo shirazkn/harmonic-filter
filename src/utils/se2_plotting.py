@@ -15,7 +15,12 @@ from scipy.stats import multivariate_normal, gaussian_kde
 from src.distributions.se2_distributions import SE2Gaussian
 from src.filters.iekf_utils import ExpSE2
 from src.utils.evaluate_ate import align
+from matplotlib.colors import Normalize
 
+def get_alphas(f):
+    alphas = Normalize(0.0, 0.6, clip=True)(np.abs(f))  # return min(f, 0.8)/0.8
+    alphas = np.clip(alphas, .4, 0.8)
+    return alphas
 
 def plot_se2_contours(fs: List[np.ndarray],
                       x: np.ndarray,
@@ -69,11 +74,13 @@ def plot_se2_contours(fs: List[np.ndarray],
 
     for i, f in enumerate(fs):
         if f.ndim == 3:
-            f = np.trapz(f, x=theta, axis=2)
+            f = np.trapezoid(f, x=theta, axis=2)
 
         # Color mesh plot of the distributions - Scaled distribution [0, 1]
         f_scaled = (f - f.min()) / (f.max() - f.min())
-        axes[i].pcolormesh(x, y, f_scaled, shading='auto', cmap=color_maps[i], vmin=0, vmax=1.0)
+        
+        axes[i].pcolormesh(x, y, f_scaled, shading='auto', cmap=color_maps[i], 
+                           vmin=0, vmax=1.0, alpha=get_alphas(f_scaled))
         axes[i].set_title(titles[i], fontdict={'fontsize': 18})
         # Whether to plot or not contours in main plot
         if level_contours:
@@ -93,7 +100,7 @@ def plot_se2_contours(fs: List[np.ndarray],
             proxy.extend([Line2D([], [], linestyle='none', markersize=10, **params)])
 
     # ax4.set_title(f'Probability contour at {np.round(level, 2)}')
-    ax4.set_title(f'Map of the environment', fontdict={'fontsize': 18})
+    ax4.set_title(f'Map of the Environment', fontdict={'fontsize': 18})
     ax4.legend(handles=proxy, fancybox=True, framealpha=1, shadow=True, borderpad=1, fontsize="14")
     # Append contour axis to axes
     axes.append(ax4)
@@ -161,7 +168,7 @@ def plot_beacons(beacons: np.ndarray, ax: plt.Axes, color: str = 'dimgrey', mark
     :param color: Color of the beacons
     :param marker: Marker of the beacons
     """
-    ax.scatter(beacons[:, 0], beacons[:, 1], c=color, marker=marker, alpha=1.0, s=100, edgecolor='k', linewidths=1)
+    ax.scatter(beacons[:, 0], beacons[:, 1], c=color, marker=marker, alpha=0.85, s=50, edgecolor='k', linewidths=1, zorder=20)
 
 
 def plot_se2_filters(filters: Dict[str, List[np.ndarray]],
@@ -219,7 +226,7 @@ def plot_se2_filters(filters: Dict[str, List[np.ndarray]],
     # Scale distribution between 0 - 1
     max_value, min_value = harmonic_posterior.max(), harmonic_posterior.min()
     scaled_posterior = (harmonic_posterior - min_value) / (max_value - min_value)
-    ax1.pcolormesh(x, y, scaled_posterior, shading='auto', cmap=cmap, zorder=0, vmin=0, vmax=1.0)
+    ax1.pcolormesh(x, y, scaled_posterior, shading='auto', cmap=cmap, zorder=0, vmin=0, vmax=1.0, alpha=get_alphas(scaled_posterior))
 
     ### Plot EKF ###
     for c in cfg:
@@ -246,7 +253,7 @@ def plot_se2_filters(filters: Dict[str, List[np.ndarray]],
     c["edgecolor"] = "honeydew"
     c["lw"] = 1.5
     ax3.scatter(pf[2][0], pf[2][1], **c)
-    ax3.scatter(pf[1][idx, 0], pf[1][idx, 1], c=c['c'], s=30, alpha=0.2, marker=c['marker'], zorder=0)
+    ax3.scatter(pf[1][idx, 0], pf[1][idx, 1], c=c['c'], s=pf[-1][idx]*1e4, alpha=0.2, marker=c['marker'], zorder=0)
 
     ### Plot HF ###
     if 'HistF' in filters:
@@ -272,7 +279,7 @@ def plot_se2_filters(filters: Dict[str, List[np.ndarray]],
     hf_posterior = filter4[1].sum(-1)
     max_value, min_value = hf_posterior.max(), hf_posterior.min()
     hf_posterior = (hf_posterior - min_value) / (max_value - min_value)
-    ax4.pcolormesh(x, y, hf_posterior, shading='auto', cmap=cmap, zorder=0, vmin=0, vmax=1.0)
+    ax4.pcolormesh(x, y, hf_posterior, shading='auto', cmap=cmap, zorder=0, vmin=0, vmax=1.0, alpha=get_alphas(hf_posterior))
 
     ### Plot beacons and ground truth ###
     for c in cfg:
@@ -723,11 +730,11 @@ def plot_se2_bananas(filters: Dict[str, List[np.ndarray]],
 
     for i, f in enumerate([filters['prior'][1], filters['step'][1]]):
         if f.ndim == 3:
-            f = np.trapz(f, x=theta, axis=2)
+            f = np.trapezoid(f, x=theta, axis=2)
 
         # Color mesh plot of the distributions - Scaled distribution [0, 1]
         f_scaled = (f - f.min()) / (f.max() - f.min())
-        axes[i].pcolormesh(x, y, f_scaled, shading='auto', cmap=color_maps[i], vmin=0, vmax=1.0)
+        axes[i].pcolormesh(x, y, f_scaled, shading='auto', cmap=color_maps[i], vmin=0, vmax=1.0, alpha=get_alphas(f_scaled))
         axes[i].set_title(titles[i], fontdict={'fontsize': 18})
 
     ### Plot HEF ###
