@@ -30,18 +30,17 @@ def create_image(img_path1: str, img_path2: str, output_filename: str) -> str:
     output_image.save(output_filename)
 
 
-def create_mp4(path: str, video_name: str, duration=100):
+def create_mp4(path: str, duration=100):
     """
     :param path: path where experiment data was saved
-    :param video_name: output video name
     :param duration: duration of each frame in ms
     :return:
     """
     # Provide the folder path containing the images
     folder_path = os.path.join(path, 'figures')
     # Provide the output path for the video
-    output_video = os.path.join(path, video_name)
-    output_video_mode = os.path.join(path, "map_video.mp4")
+    output_video = os.path.join(path, "means.mp4")
+    output_video_mode = os.path.join(path, "modes.mp4")
     # Temp folder for images joined
     temp_path = os.path.join(path, "temp")
 

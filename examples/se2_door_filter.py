@@ -144,24 +144,23 @@ def main(cfg: DictConfig) -> Optional[float]:
     nll["PF"].append(pf.neg_log_likelihood(gt_pose, (-0.5, 0.5), grid_size))
     nll["FSF"].append(fsf.neg_log_likelihood(gt_pose))
 
-    for it in tqdm(range(30), desc="Filtering door dataset..."):
+    for it in tqdm(range(50), desc="Filtering door dataset..."):
         ### Predict step ###
         motion_distribution = simulator.motion()
-        motion_cov = np.linalg.inv(motion_distribution.inv_cov)
 
         hef_pred = hef.prediction(motion_model=motion_distribution)
 
         ekf.prediction(
             step=motion_distribution.mu,
-            step_cov=motion_cov,
+            step_cov=motion_distribution.cov,
         )
         pf.prediction(
             step=motion_distribution.mu,
-            step_cov=motion_cov,
+            step_cov=motion_distribution.cov,
         )
         fsf.prediction(
             step=motion_distribution.mu,
-            step_cov=motion_cov,
+            step_cov=motion_distribution.cov,
         )
 
         ### Update step ###
@@ -298,14 +297,11 @@ def main(cfg: DictConfig) -> Optional[float]:
                 alpha=map_alpha,
                 zorder=-11,
             )
-            axes_means[3].scatter(gt_pose[0], gt_pose[1], 
-                                marker='o', s=10,  c='k', zorder=4)
-            axes_modes[3].scatter(gt_pose[0], gt_pose[1], marker='o', s=30,  c='k', zorder=4)
-            
-            dead_reckoning = gt_pose + motion_distribution.mu
-            axes_means[3].scatter(dead_reckoning[0], dead_reckoning[1], 
-                                marker='o', s=10,  c='k', zorder=4)
-            axes_modes[3].scatter(dead_reckoning[0], dead_reckoning[1], marker='o', s=30,  c='k', zorder=4)
+            for c in plt_cfg.CONFIG_FILTERS_SE2_LF:
+                if c.get('label') == 'Ground Truth':
+                    break
+            axes_means[3].scatter(gt_pose[0], gt_pose[1], **c)
+            axes_modes[3].scatter(gt_pose[0], gt_pose[1], **c)
             
             axes_modes[3].imshow(
                 simulator.map_array[2],
@@ -416,12 +412,12 @@ def main(cfg: DictConfig) -> Optional[float]:
     plt.close()
     # Create video
     if cfg.get("duration"):
-        create_mp4(results_path, "result.mp4", duration=cfg.duration)
+        create_mp4(results_path, duration=cfg.duration)
     
     # Log information to the logger (if available)
     # log_experiment_info(cfg, results_path)
 
     import subprocess
-    subprocess.run(["open", results_path])
+    subprocess.run(["open", results_path + "/means.mp4"])
 
     return 0.0

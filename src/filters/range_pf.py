@@ -172,27 +172,31 @@ class BearingPF(RangePF):
         mask = preprocess_mask(map_mask, self.particles)
 
         self.weights.fill(1.)
+        self.weights = np.where(mask == 0, 0.0, self.weights) # Mask out particles outside map
+
         # Map weights temporarily to log space
         # self.weights = np.log(self.weights + 1e-9)
         
         # Assumes independent measurements 
         # p(z_{t,i} | x_t, m) is a mixture of n_doors components
-        for i, obs in enumerate(observations):
+        for obs in observations:
             diff =  rearrange(landmarks, "n m -> n 1 m") - rearrange(self.particles[:, :2], "p m -> 1 p m")
+
+            # distances[i][j] is distance of landmark[i] from particle[j]
+            distances = np.linalg.norm(diff, axis=2)
+
             # Output of arctan2 is in (-π,π)
             pred_angle = np.arctan2(diff[:, :, 1], diff[:, :, 0]) - self.particles[:, 2]
             diff_angle = obs - pred_angle
             # Wrap angle
             diff_angle = (diff_angle + np.pi) % (2 * np.pi) - np.pi
-            # This mask will blackout particles outside map
-            mixture = norm(diff_angle, rearrange(observations_std, "n -> n 1")).pdf(0.0)
+            mixture = norm(0.0, rearrange(observations_std, "n -> n 1")).pdf(diff_angle)
 
-            mixture = mixture.sum(0) + 1e-8
-            # max along components dimension
+            mixture = (mixture/distances).sum(0) + 1e-8
+
             # self.weights = np.maximum(self.weights, np.log(mixture))
             self.weights *= mixture
 
-        self.weights = np.where(mask == 0, 0.0, self.weights) # Mask out particles outside map
         self.weights /= np.sum(self.weights)
         # self.weights = np.exp(self.weights)
 
