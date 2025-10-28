@@ -15,3 +15,4 @@ hydra-colorlog
 # Submitit launcher
 git+https://github.com/MikeS96/hydra_submitit_launcher@main#egg=hydra-submitit-launcher
 hydra_optuna_sweeper
+torch
