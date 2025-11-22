@@ -110,5 +110,4 @@ elif dimension == 2:
     ax2.set_xlabel('x')
     ax2.set_ylabel('y')
     plt.tight_layout()
-    plt.show()
-
+    plt.show() 
