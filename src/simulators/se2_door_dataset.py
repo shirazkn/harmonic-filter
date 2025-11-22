@@ -59,6 +59,7 @@ class SE2DoorDataset(Simulator):
         self.odom_bins: Optional[np.ndarray] = None
         self.gt_bins: Optional[np.ndarray] = None
         self.bearing_bins: Optional[np.ndarray] = None
+        self.timestep_bins: Optional[np.ndarray] = None
         self.map_array: Optional[np.ndarray] = None
         self.map_mask: Optional[np.ndarray] = None
         # Used in particle filter
@@ -105,14 +106,13 @@ class SE2DoorDataset(Simulator):
             diff = rearrange(self.doors, "n m -> n 1 m") - rearrange(
                 self.pose_grid[:, :2], "p m -> 1 p m"
             )
-            angle = np.arctan2(diff[:, :, 1], diff[:, :, 0]) - (
-                (self.pose_grid[:, 2] + np.pi) % (2 * np.pi) - np.pi
-            )
+            angle = np.arctan2(diff[:, :, 1], diff[:, :, 0]) \
+                - self.pose_grid[:, 2] 
             # Wrap angle.
-            angle = (angle + np.pi) % (2 * np.pi) - np.pi
             diff_angle = obs - angle
             diff_angle = (diff_angle + np.pi) % (2 * np.pi) - np.pi
-            mixture = self.map_mask * norm(diff_angle, rearrange(observations_std, "n -> n 1")).pdf(0.0)
+            mixture = self.map_mask * norm(0.0, 
+                    rearrange(observations_std, "n -> n 1")).pdf(diff_angle)
             mixture = mixture.max(0) + 1e-8
             # Max along components dimension
             energy = np.maximum(energy, np.log(mixture))
@@ -187,6 +187,7 @@ class SE2DoorDataset(Simulator):
         odom_last_idx = 0
         self.gt_bins = []
         self.bearing_bins = []
+        timestamps = []
         for d in detections:
             t = d["timestamp"]
             self.bearing_bins.append(d["bearings"])
@@ -202,7 +203,11 @@ class SE2DoorDataset(Simulator):
                     odom_data[i_d_odom]["transform"],
                 )
             )
+            timestamps.append(t)
             odom_last_idx = i_d_odom
+        
+        dt = np.mean(np.diff(np.asarray(timestamps)))
+        self.timestep_bins = [dt] + (np.diff(timestamps)).tolist()
         # Check all dimensions are correct
         assert (
             len(self.odom_bins) == len(self.gt_bins) == len(self.bearing_bins)

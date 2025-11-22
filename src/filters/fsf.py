@@ -2,7 +2,31 @@
 A class for the Fourier Series Filter (FSF)
 """
 import numpy as np
-from scipy.stats import multivariate_normal, norm
+import torch as t
+from scipy.stats import multivariate_normal
+
+from scipy.fft import fftshift, ifftshift, fftn, ifftn
+
+def lie_derivative_matrix(ind, k: list[int]=None, 
+                          bandwidth: int=None, 
+                          domain_length=2*t.pi,):
+    i = 1j
+    pol = t.as_tensor(t.pi/domain_length)
+    if ind in [1, 2]:
+        k1 = k[0]
+        k2 = k[1]
+        if ind == 1:
+            upper = i * pol * k1 - pol * k2
+            lower = i * pol * k1 + pol * k2
+        elif ind == 2:
+            upper = i * pol * k2 + pol * k1
+            lower = i * pol * k2 - pol * k1
+        
+        return t.diag(upper.repeat(2*bandwidth), 1) \
+            + t.diag(lower.repeat(2*bandwidth), -1)
+    
+    elif ind == 3:
+        return t.diag(t.arange(-bandwidth, bandwidth+1))
 
 
 class FourierSeriesFilter:
@@ -10,6 +34,7 @@ class FourierSeriesFilter:
         self,
         prior: np.ndarray,
         prior_cov: np.ndarray,
+        grid_size: tuple[int, int, int],
         grid_samples: np.ndarray):
         """
         :param prior: Prior mean.
@@ -18,15 +43,21 @@ class FourierSeriesFilter:
         self.pose_grid = grid_samples
         self.prior = multivariate_normal(prior, prior_cov).pdf(self.pose_grid)
         self.prior /= np.sum(self.prior)
+        self.bandwidths = grid_size
 
-    def prediction(self, step, step_cov):
+    def prediction(self, step, diffusion_coefficient, dt):
         """
         Prediction step
         :param motion_model: motion model for prediction step
         :return unnormalized belief distribution
         """ 
-        # Update prior
-        self.prior = self.prior
+        import pdb; pdb.set_trace()
+        f_hat = fftshift(
+            fftn(
+                ifftshift(self.prior),
+                norm='forward'
+                )
+            )
 
         return self.prior
 

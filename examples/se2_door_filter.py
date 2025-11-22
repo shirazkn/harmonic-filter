@@ -97,6 +97,7 @@ def main(cfg: DictConfig) -> Optional[float]:
 
     # Define prior
     mu_prior = simulator.position.parameters()
+    # mu_prior = np.array([0.0, 0.0, 0.0])
     cov_prior = np.diag(cfg.filter.var_prior)
 
     prior = SE2Gaussian(mu_prior, cov_prior, samples=pose_grid, fft=fft)
@@ -115,8 +116,7 @@ def main(cfg: DictConfig) -> Optional[float]:
         prior=mu_prior,
         prior_cov=cov_prior,
         grid_samples=pose_grid,
-        # grid_size=grid_size,
-        # d_door2pose=d_door2pose,
+        grid_size=grid_size
     )
 
     # For logging
@@ -144,23 +144,26 @@ def main(cfg: DictConfig) -> Optional[float]:
     nll["PF"].append(pf.neg_log_likelihood(gt_pose, (-0.5, 0.5), grid_size))
     nll["FSF"].append(fsf.neg_log_likelihood(gt_pose))
 
-    for it in tqdm(range(50), desc="Filtering door dataset..."):
+    for it in tqdm(range(100), desc="Filtering door dataset..."):
         ### Predict step ###
         motion_distribution = simulator.motion()
 
+        # For the HEF, we use the same parameters as were used in their paper
+        # The other filters seem to work better with a lower process noise
         hef_pred = hef.prediction(motion_model=motion_distribution)
 
         ekf.prediction(
             step=motion_distribution.mu,
-            step_cov=motion_distribution.cov,
+            step_cov=motion_distribution.cov*0.25,
         )
         pf.prediction(
             step=motion_distribution.mu,
-            step_cov=motion_distribution.cov,
+            step_cov=motion_distribution.cov*0.25,
         )
         fsf.prediction(
             step=motion_distribution.mu,
-            step_cov=motion_distribution.cov,
+            diffusion_coefficient=motion_distribution.cov,
+            dt=simulator.timestep_bins[simulator.iteration],
         )
 
         ### Update step ###

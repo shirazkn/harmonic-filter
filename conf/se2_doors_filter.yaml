@@ -22,7 +22,7 @@ print_config: True
 ignore_warnings: True
 
 # seed for random number generators in pytorch, numpy and python.random
-seed: 11111
+seed: 12345
 # default name for the experiment, determines logging folder path
 # (you can overwrite this name in experiment configs)
 name: se2_doors_bearing_filter
@@ -40,7 +40,7 @@ filter:
   # grid_size: [35, 35, 20]
   var_prior: [0.01, 0.01, 0.01]
   var_motion: 1e-3
-  var_measurement: 0.1
+  var_measurement: 0.5
   d_door2pose: 0.1
   scaling_factor: 0.0325
   offset_x: 4.71
