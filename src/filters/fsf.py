@@ -51,6 +51,7 @@ class FourierSeriesFilter:
         :param motion_model: motion model for prediction step
         :return unnormalized belief distribution
         """ 
+        #So this gives the vector of fourier coefficients as seen in equation 16
         import pdb; pdb.set_trace()
         f_hat = fftshift(
             fftn(
@@ -58,7 +59,9 @@ class FourierSeriesFilter:
                 norm='forward'
                 )
             )
-
+        # now we propagate the coefficients forward
+        # We need the "A" operator from the paper
+        
         return self.prior
 
     def update(self,

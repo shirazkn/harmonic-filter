@@ -65,12 +65,16 @@ if dimension == 1:
     plt.axhline(y=0, color='k', linestyle='-')
     plt.show()
 elif dimension == 2:
-    mu = np.array([0.1, 0.4])
-    sigma = np.array([[1, 0], [0, 1]])
+    mu_1 = np.array([0.1, 0.4])
+    sigma_1 = np.array([[20, 0], [0, 50]])
+    
+    mu_2 = np.array([50, 100])
+    sigma_2 = np.array([[9, 0], [0, 5]])
+    #samples = bandwidth for fft
 
-    samples = 29*np.array([1, 1])
+    samples = 40*np.array([1, 1])
     subsamples = 20*np.array([1, 1])
-    def gauss(x):
+    def gauss(x, mu, sigma):
         diff = x - mu
         diff_flat = np.reshape(diff, (-1,2))
         inv_sigma = np.linalg.inv(sigma)
@@ -80,20 +84,36 @@ elif dimension == 2:
         det_sigma = np.linalg.det(sigma)
         scaling = 1.0 / (2 * np.pi * np.sqrt(det_sigma))
         return scaling * np.exp(exponent)
-    x = np.linspace(mu[0] - samples[0]*0.5, mu[0] + samples[0]*0.5, samples[0]*subsamples[0])
-    y = np.linspace(mu[1] - samples[1]*0.5, mu[1] + samples[1]*0.5, samples[1]*subsamples[1])
-    X, Y = np.meshgrid(x,y)
-    all_pos = np.dstack((X,Y))
-    f = np.array(gauss(all_pos))
-    f_hat = fft(sf, f[::subsamples[0], ::subsamples[1]])
+    x_1 = np.linspace(mu_1[0] - samples[0]*0.5, mu_1[0] + samples[0]*0.5, samples[0]*subsamples[0])
+    y_1 = np.linspace(mu_1[1] - samples[1]*0.5, mu_1[1] + samples[1]*0.5, samples[1]*subsamples[1])
+    
+    x_2 = np.linspace(mu_2[0] - samples[0]*0.5, mu_2[0] + samples[0]*0.5, samples[0]*subsamples[0])
+    y_2 = np.linspace(mu_2[1] - samples[1]*0.5, mu_2[1] + samples[1]*0.5, samples[1]*subsamples[1])
+
+    x = np.union1d(x_1, x_2)
+    y = np.union1d(y_1, y_2)
+
+    X_1, Y_1 = np.meshgrid(x,y)
+    all_pos_1 = np.dstack((X_1,Y_1))
+    f_1 = np.array(gauss(all_pos_1, mu_1, sigma_1))
+    f_hat_1 = fft(sf, f_1[::subsamples[0], ::subsamples[1]])
 
     #uncommnet below if you want to use subsampling. otherwise use above
     #f_hat = fft(sf, f)
-    g = fft(sf, f_hat, inverse=True)
+    g_1 = fft(sf, f_hat_1, inverse=True)
+
+    X_2, Y_2 = np.meshgrid(x,y)
+    all_pos_2 = np.dstack((X_2, Y_2))
+    f_2 = np.array(gauss(all_pos_2, mu_2, sigma_2))
+    f_hat_2 = fft(sf, f_2[::subsamples[0], ::subsamples[1]])
+    g_2 = fft(sf, f_hat_2, inverse=True)
+
+    f = f_1 + f_2
+    g = g_1 + g_2 
     fig = plt.figure(figsize=(18, 6))
     # Plot A: Original High-Res
     ax1 = fig.add_subplot(131, projection='3d')
-    ax1.plot_surface(X, Y, f, cmap='viridis', edgecolor='none')
+    ax1.plot_surface(X_1, Y_1, f, cmap='viridis', edgecolor='none')
     ax1.set_title(r"Original $f(x,y)$")
     ax1.set_xlabel('x')
     ax1.set_ylabel('y')

@@ -146,6 +146,8 @@ def main(cfg: DictConfig) -> Optional[float]:
 
     for it in tqdm(range(100), desc="Filtering door dataset..."):
         ### Predict step ###
+
+        #this returns a SE2Gaussian object
         motion_distribution = simulator.motion()
 
         # For the HEF, we use the same parameters as were used in their paper

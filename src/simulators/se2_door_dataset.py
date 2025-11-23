@@ -272,3 +272,46 @@ class SE2DoorDataset(Simulator):
         # Initial Pose
         self.initial_pose[0] = ( self.initial_pose[0] + self.offset_x) * self.scaling_factor
         self.initial_pose[1] = ( self.initial_pose[1] + self.offset_y) * self.scaling_factor
+
+
+    
+    def get_wheel_omegas(self, baseline_meters: float, wheel_radius_meters: float) -> np.ndarray:
+        """
+        Calculates omega_L and omega_R (wheel rotational speeds in rad/s).
+        
+        Args:
+            baseline_meters (L): Distance between wheels.
+            wheel_radius_meters (r): Radius of the wheels.
+        Returns:
+            np.ndarray: Array of shape (N, 2) containing [omega_L, omega_R]
+        """
+        wheel_omegas = []
+        
+        for i in range(len(self.odom_bins)):
+            # 1. Get displacement data
+            step_map_units = self.odom_bins[i]
+            dt = self.timestep_bins[i]
+            
+            if dt <= 1e-6:
+                wheel_omegas.append([0.0, 0.0])
+                continue
+
+            # 2. Unscale dx to get real meters (dtheta is already in radians)
+            dx_meters = step_map_units[0] / self.scaling_factor
+            dtheta_rad = step_map_units[2]
+            
+            # 3. Calculate Robot Velocities (v and omega_robot)
+            v = dx_meters / dt
+            w_robot = dtheta_rad / dt
+            
+            # 4. Inverse Kinematics Equations
+            # omega_R = (v + (w_robot * L / 2)) / r
+            # omega_L = (v - (w_robot * L / 2)) / r
+            
+            omega_R = (v + (w_robot * baseline_meters / 2.0)) / wheel_radius_meters
+            omega_L = (v - (w_robot * baseline_meters / 2.0)) / wheel_radius_meters
+            
+            wheel_omegas.append([omega_L, omega_R])
+            
+        return np.array(wheel_omegas)
+    
