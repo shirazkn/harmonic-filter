@@ -28,7 +28,6 @@ def lie_derivative_matrix(ind, k: list[int]=None,
     elif ind == 3:
         return t.diag(t.arange(-bandwidth, bandwidth+1))
 
-
 class FourierSeriesFilter:
     def __init__(
         self,
@@ -59,8 +58,6 @@ class FourierSeriesFilter:
                 norm='forward'
                 )
             )
-        # now we propagate the coefficients forward
-        # We need the "A" operator from the paper
         
         return self.prior
 

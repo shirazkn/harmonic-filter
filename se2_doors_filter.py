@@ -7,7 +7,7 @@ def main(cfg: DictConfig):
     # Imports can be nested inside @hydra.main to optimize tab completion
     # https://github.com/facebookresearch/hydra/issues/934
     from examples.se2_door_filter import main as se2_filter
-
+    #this will take you to se2_door_filter.py
     return se2_filter(cfg)
 
 

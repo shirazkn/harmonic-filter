@@ -36,9 +36,13 @@ class SE2DoorDataset(Simulator):
         doors_blacklist: List = [],
         pose_grid: Optional[np.ndarray] = None,
         fft: FFTBase = None,
+        baseline_meters: float = 0.1,
+        wheel_radius_meters: float = 0.02, 
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.baseline_meters = baseline_meters
+        self.wheel_radius_meters = wheel_radius_meters
         self.position: Optional[SE2Group] = None
         self.data_path = data_path
         # Used to scale motion step, UWB measurements and standard deviations
@@ -275,7 +279,7 @@ class SE2DoorDataset(Simulator):
 
 
     
-    def get_wheel_omegas(self, baseline_meters: float, wheel_radius_meters: float) -> np.ndarray:
+    def get_wheel_omegas(self) -> np.ndarray:
         """
         Calculates omega_L and omega_R (wheel rotational speeds in rad/s).
         
@@ -291,7 +295,6 @@ class SE2DoorDataset(Simulator):
             # 1. Get displacement data
             step_map_units = self.odom_bins[i]
             dt = self.timestep_bins[i]
-            
             if dt <= 1e-6:
                 wheel_omegas.append([0.0, 0.0])
                 continue
@@ -308,10 +311,43 @@ class SE2DoorDataset(Simulator):
             # omega_R = (v + (w_robot * L / 2)) / r
             # omega_L = (v - (w_robot * L / 2)) / r
             
-            omega_R = (v + (w_robot * baseline_meters / 2.0)) / wheel_radius_meters
-            omega_L = (v - (w_robot * baseline_meters / 2.0)) / wheel_radius_meters
+            omega_R = (v + (w_robot * self.baseline_meters / 2.0)) / self.wheel_radius_meters
+            omega_L = (v - (w_robot * self.baseline_meters / 2.0)) / self.wheel_radius_meters
             
             wheel_omegas.append([omega_L, omega_R])
             
         return np.array(wheel_omegas)
+    
+    def get_body_velocity_h(self) -> np.ndarray:
+        """
+        Calculates h_t (body velocity vector) for the entire trajectory.
+        
+        Args:
+            baseline_meters (l): Distance between wheels.
+            wheel_radius_meters (r): Radius of the wheels.
+        
+        Returns:
+            np.ndarray: Array of shape (N, 3) where each row is [v, 0, omega]
+        """
+        # 1. Get wheel speeds (N, 2) -> [omega_L, omega_R]
+        # We reuse your existing logic here
+        wheel_omegas = self.get_wheel_omegas()
+        omega_L = wheel_omegas[:, 0]
+        omega_R = wheel_omegas[:, 1]
+
+        # 2. Implement the equation from the image
+        # Row 1: v = (r/2) * (w_L + w_R)
+        v = (self.wheel_radius_meters / 2.0) * (omega_L + omega_R)
+        
+        # Row 2: 0 (No lateral slip)
+        lateral = np.zeros_like(v)
+        
+        # Row 3: w = (r/l) * (w_R - w_L)
+        w = (self.wheel_radius_meters / self.baseline_meters) * (omega_R - omega_L)
+
+        # 3. Stack into (N, 3) matrix -> [v, 0, w]
+        # This represents h_t at every timestep t
+        h_t_seq = np.stack([v, lateral, w], axis=1)
+        
+        return h_t_seq
     

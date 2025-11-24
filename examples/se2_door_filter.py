@@ -82,6 +82,7 @@ def main(cfg: DictConfig) -> Optional[float]:
     var_motion = cfg.filter.var_motion
     motion_noise = np.ones(3) * np.sqrt(var_motion)
     measurement_noise = np.sqrt(cfg.filter.var_measurement)
+    # Go into SE2DoorDataset here. There you will see the odom data loaded in from the odom_to_imu_link
     simulator = SE2DoorDataset(
         data_path=cfg.data_dir,
         fft=fft,
@@ -94,7 +95,6 @@ def main(cfg: DictConfig) -> Optional[float]:
         pose_grid=pose_grid,
         measurement_noise=measurement_noise,
     )
-
     # Define prior
     mu_prior = simulator.position.parameters()
     # mu_prior = np.array([0.0, 0.0, 0.0])
@@ -118,6 +118,8 @@ def main(cfg: DictConfig) -> Optional[float]:
         grid_samples=pose_grid,
         grid_size=grid_size
     )
+
+    h_sequence = simulator.get_body_velocity_h()
 
     # For logging
     mean_trajectory = dict(
@@ -162,7 +164,10 @@ def main(cfg: DictConfig) -> Optional[float]:
             step=motion_distribution.mu,
             step_cov=motion_distribution.cov*0.25,
         )
+
+        
         fsf.prediction(
+            current_h = h_sequence[it],
             step=motion_distribution.mu,
             diffusion_coefficient=motion_distribution.cov,
             dt=simulator.timestep_bins[simulator.iteration],
