@@ -118,7 +118,8 @@ def main(cfg: DictConfig) -> Optional[float]:
         grid_samples=pose_grid,
         grid_size=grid_size
     )
-
+    # For logging/filtering purposes
+    # Get initial h sequence for FSF
     h_sequence = simulator.get_body_velocity_h()
 
     # For logging

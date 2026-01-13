@@ -58,7 +58,7 @@ class FourierSeriesFilter:
                 norm='forward'
                 )
             )
-        
+        f_hat = 
         return self.prior
 
     def update(self,
